@@ -7,7 +7,9 @@ import { CarDto } from './dto/car.dto.js';
 import { Car } from './car.entity.js';
 import { CarUpdateDto } from './dto/car.update-dto.js';
 import { User } from '../users/user.entity.js';
-
+import { EntitySaveException } from '../exceptions/entity-save.exception.js';
+import { EntityNotFoundException } from '../exceptions/entity-not-found.exception.js';
+import { EntityUpdateException } from '../exceptions/entity-update.exception.js';
 
 @Injectable()
 export class CarsService {
@@ -18,6 +20,10 @@ export class CarsService {
   ) {}
 
   async create(saveDto: CarSaveDto): Promise<CarDto> {
+    if (await this.repository.isVinExists(saveDto.vin)) {
+      throw new EntitySaveException('Car', 'VIN');
+    }
+
     const entity: Car = this.mapper.mapDtoToEntity(saveDto);
     entity.active = true;
     await this.repository.save(entity);
@@ -26,6 +32,11 @@ export class CarsService {
 
   async getAllActiveCars(): Promise<CarDto[]> {
     const cars: Car[] = await this.repository.findAllActive();
+
+    if (cars.length === 0) {
+      throw new EntityNotFoundException('Car');
+    }
+
     return this.mapper.mapEntityListToDtoList(cars);
   }
 
@@ -44,7 +55,7 @@ export class CarsService {
     const car: Car | null = await this.repository.findById(id);
 
     if (!car || !car.active) {
-      return null;
+      throw new EntityNotFoundException('Car', id);
     }
 
     return car;
@@ -56,6 +67,8 @@ export class CarsService {
     if (foundCar) {
       foundCar.color = updateDto.newColor;
       await this.repository.save(foundCar);
+    } else {
+      throw new EntityNotFoundException('Car', id);
     }
   }
 
@@ -84,6 +97,12 @@ export class CarsService {
     const car: Car | null = await this.getActiveEntityById(carId);
     const owner: User | null =
       await this.userService.getActiveEntityById(ownerId);
+
+    if (!car || car.owner.id === ownerId) {
+      throw new EntityUpdateException(
+        'Car not found or this user is already owner',
+      );
+    }
 
     if (car && owner) {
       car.owner = owner;
